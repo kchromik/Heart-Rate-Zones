@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import CoreBluetooth
 
 // MARK: - Heart Rate Zone Model
 
@@ -86,12 +87,15 @@ class HeartRateProvider: ObservableObject {
     @Published var currentRate: Int = 80
     @Published var currentZone: HeartRateZone
     @Published var zones: [HeartRateZone] = []
+    @Published var isUsingBluetoothData: Bool = false
     
     // UserDefaults key for storing zones
     private static let zonesKey = "savedHeartRateZones"
 
     // Private properties
     private var timer: AnyCancellable?
+    private var bluetoothCancellable: AnyCancellable?
+    private var bluetoothProvider: BluetoothDeviceProvider?
     private let minRate: Int = 50
     private let maxRate: Int = 200
     private let updateInterval: TimeInterval = 2.0 // Update every 2 seconds
@@ -110,6 +114,11 @@ class HeartRateProvider: ObservableObject {
     }
     
     func startSimulation() {
+        // Only start simulation if not using Bluetooth data
+        guard !isUsingBluetoothData else { return }
+        
+        stopSimulation()
+        
         timer = Timer.publish(every: updateInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
@@ -121,6 +130,35 @@ class HeartRateProvider: ObservableObject {
     func stopSimulation() {
         timer?.cancel()
         timer = nil
+    }
+    
+    // Start using data from Bluetooth heart rate monitor
+    var startUsingBluetoothData: (BluetoothDeviceProvider) -> Void {
+        return { [weak self] provider in
+            self?.stopSimulation()
+            self?.bluetoothProvider = provider
+            self?.isUsingBluetoothData = true
+            
+            // Subscribe to heart rate updates from the Bluetooth provider
+            self?.bluetoothCancellable = provider.$heartRate
+                .sink { [weak self] heartRate in
+                    if heartRate > 0 {
+                        self?.currentRate = heartRate
+                        self?.updateZone()
+                    }
+                }
+        }
+    }
+    
+    // Stop using Bluetooth data and return to simulation
+    var stopUsingBluetoothData: () -> Void {
+        return { [weak self] in
+            self?.bluetoothCancellable?.cancel()
+            self?.bluetoothCancellable = nil
+            self?.bluetoothProvider = nil
+            self?.isUsingBluetoothData = false
+            self?.startSimulation()
+        }
     }
     
     private func generateRandomHeartRate() {

@@ -6,12 +6,24 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ContentView: View {
-    @StateObject private var heartRateProvider = HeartRateProvider()
-    @State private var showOnboarding = true
+    // Reference to external providers instead of creating new ones
+    @ObservedObject var heartRateProvider: HeartRateProvider
+    @ObservedObject var bluetoothProvider: BluetoothDeviceProvider
+    @Binding var hasCompletedInitialSetup: Bool
+    
+    @State private var showOnboarding = false
     @State private var showZoneEditor = false
+    @State private var showBluetoothDevices = false
     @State private var animateHeartbeat = false
+    
+    init(heartRateProvider: HeartRateProvider, bluetoothProvider: BluetoothDeviceProvider, hasCompletedInitialSetup: Binding<Bool>) {
+        self.heartRateProvider = heartRateProvider
+        self.bluetoothProvider = bluetoothProvider
+        self._hasCompletedInitialSetup = hasCompletedInitialSetup
+    }
     
     var body: some View {
         ZStack {
@@ -23,19 +35,37 @@ struct ContentView: View {
                 // Zones display
                 zonesView
                 
-                // Edit zones button
-                Button(action: {
-                    showZoneEditor = true
-                }) {
-                    HStack {
-                        Image(systemName: "slider.horizontal.3")
-                        Text("Edit Zones")
+                // Buttons row
+                HStack(spacing: 15) {
+                    // Connect to device button
+                    Button(action: {
+                        showBluetoothDevices = true
+                    }) {
+                        HStack {
+                            Image(systemName: heartRateProvider.isUsingBluetoothData ? "bolt.heart.fill" : "bolt.heart")
+                            Text(heartRateProvider.isUsingBluetoothData ? "Change Device" : "Connect Device")
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(heartRateProvider.isUsingBluetoothData ? Color.blue.opacity(0.6) : Color.gray.opacity(0.3))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.gray.opacity(0.3))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
+                    
+                    // Edit zones button
+                    Button(action: {
+                        showZoneEditor = true
+                    }) {
+                        HStack {
+                            Image(systemName: "slider.horizontal.3")
+                            Text("Edit Zones")
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.gray.opacity(0.3))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
+                    }
                 }
                 .padding(.top, 10)
             }
@@ -57,20 +87,41 @@ struct ContentView: View {
             )
             .preferredColorScheme(.dark)
         }
+        .sheet(isPresented: $showBluetoothDevices) {
+            BluetoothDeviceView(
+                bluetoothProvider: bluetoothProvider,
+                heartRateProvider: heartRateProvider
+            )
+            .preferredColorScheme(.dark)
+            .onDisappear {
+                // Disconnect and return to home screen if needed
+                if !bluetoothProvider.isConnected {
+                    hasCompletedInitialSetup = false
+                }
+            }
+        }
         .preferredColorScheme(.dark)
     }
     
     // Heart rate display with animation
     private var heartRateView: some View {
         VStack(spacing: 15) {
-            Text(heartRateProvider.currentZone.name)
-                .font(.headline)
-                .foregroundColor(heartRateProvider.currentZone.color)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(heartRateProvider.currentZone.color.opacity(0.2))
-                .cornerRadius(20)
-                .animation(.spring(response: 0.5), value: heartRateProvider.currentZone.id)
+            HStack(spacing: 8) {
+                Text(heartRateProvider.currentZone.name)
+                    .font(.headline)
+                    .foregroundColor(heartRateProvider.currentZone.color)
+                
+                if heartRateProvider.isUsingBluetoothData {
+                    Image(systemName: "bolt.heart.fill")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(heartRateProvider.currentZone.color.opacity(0.2))
+            .cornerRadius(20)
+            .animation(.spring(response: 0.5), value: heartRateProvider.currentZone.id)
             
             ZStack {
                 // Pulse animation
@@ -88,7 +139,8 @@ struct ContentView: View {
                         .scaleEffect(animateHeartbeat ? 1.1 : 1.0)
                         .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
                     
-                    Text("\(heartRateProvider.currentRate)")
+                    // Displays either the Bluetooth heart rate or the simulated heart rate
+                    Text("\(heartRateProvider.isUsingBluetoothData ? bluetoothProvider.heartRate : heartRateProvider.currentRate)")
                         .font(.system(size: 64, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     
@@ -169,5 +221,9 @@ struct ZoneRowView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(
+        heartRateProvider: HeartRateProvider(),
+        bluetoothProvider: BluetoothDeviceProvider(),
+        hasCompletedInitialSetup: .constant(true)
+    )
 }
