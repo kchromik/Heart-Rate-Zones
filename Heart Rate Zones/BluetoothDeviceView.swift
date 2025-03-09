@@ -21,6 +21,9 @@ struct BluetoothDeviceView: View {
     @State private var showConnectionError = false
     @State private var showContinueButton = false
     
+    // Animation state for auto-connect progress
+    @State private var autoConnectProgress = 0.0
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -40,6 +43,11 @@ struct BluetoothDeviceView: View {
                     }
                 }
                 .padding()
+                
+                // Auto-connecting overlay
+                if bluetoothProvider.isAutoConnecting {
+                    autoConnectingOverlay
+                }
             }
             .navigationTitle("Heart Rate Devices")
             .navigationBarTitleDisplayMode(.inline)
@@ -114,6 +122,46 @@ struct BluetoothDeviceView: View {
                 showContinueButton = true
             }
         }
+    }
+    
+    // Auto-connecting overlay
+    private var autoConnectingOverlay: some View {
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.7)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 20) {
+                Text("Reconnecting to Last Device")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+                
+                Text("Looking for your previously connected device...")
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 40)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.gray.opacity(0.9))
+            )
+            .shadow(radius: 10)
+            .onAppear {
+                // Start animation for progress indicator
+                withAnimation(Animation.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+                    autoConnectProgress = 1.0
+                }
+            }
+        }
+        .transition(.opacity)
+        .animation(.easeInOut, value: bluetoothProvider.isAutoConnecting)
     }
     
     // View when connected to a device

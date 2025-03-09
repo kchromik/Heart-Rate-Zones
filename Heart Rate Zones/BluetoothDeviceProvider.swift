@@ -38,6 +38,7 @@ class BluetoothDeviceProvider: NSObject, ObservableObject {
     @Published var isScanning: Bool = false
     @Published var heartRate: Int = 0
     @Published var connectionState: ConnectionState = .disconnected
+    @Published var isAutoConnecting: Bool = false
     
     // Key for storing the last connected device ID
     private let lastConnectedDeviceKey = "lastConnectedHeartRateDeviceId"
@@ -149,6 +150,9 @@ extension BluetoothDeviceProvider {
         
         print("Attempting to reconnect to previously paired device: \(deviceIdString)")
         
+        // Set the flag to show we're attempting auto-connection
+        isAutoConnecting = true
+        
         // Start scanning to find the device
         startScanning()
         
@@ -164,6 +168,9 @@ extension BluetoothDeviceProvider {
                 print("Previously connected device not found nearby")
                 self.stopScanning()
             }
+            
+            // Reset the auto-connecting flag regardless of outcome
+            self.isAutoConnecting = false
         }
     }
 }
@@ -216,6 +223,9 @@ extension BluetoothDeviceProvider: CBCentralManagerDelegate {
     // Called when a connection to a peripheral succeeds
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         print("Connected to \(peripheral.name ?? "Unknown")")
+        isConnected = true
+        connectionState = .connected
+        isAutoConnecting = false  // Reset auto-connecting flag on successful connection
         
         // Discover the heart rate service
         peripheral.discoverServices([heartRateServiceUUID])
@@ -226,6 +236,7 @@ extension BluetoothDeviceProvider: CBCentralManagerDelegate {
         print("Failed to connect to \(peripheral.name ?? "Unknown"): \(error?.localizedDescription ?? "Unknown error")")
         connectionState = .failed
         isConnected = false
+        isAutoConnecting = false  // Reset auto-connecting flag on connection failure
     }
     
     // Called when a peripheral is disconnected
@@ -233,6 +244,7 @@ extension BluetoothDeviceProvider: CBCentralManagerDelegate {
         print("Disconnected from \(peripheral.name ?? "Unknown"): \(error?.localizedDescription ?? "No error")")
         connectionState = .disconnected
         isConnected = false
+        isAutoConnecting = false  // Reset auto-connecting flag on disconnect
         heartRatePeripheral = nil
         heartRateCharacteristic = nil
     }
