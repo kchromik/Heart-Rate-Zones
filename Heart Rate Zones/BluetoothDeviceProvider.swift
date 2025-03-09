@@ -39,6 +39,9 @@ class BluetoothDeviceProvider: NSObject, ObservableObject {
     @Published var heartRate: Int = 0
     @Published var connectionState: ConnectionState = .disconnected
     
+    // Key for storing the last connected device ID
+    private let lastConnectedDeviceKey = "lastConnectedHeartRateDeviceId"
+    
     // Connection state enum
     enum ConnectionState: String {
         case disconnected = "Disconnected"
@@ -99,6 +102,9 @@ class BluetoothDeviceProvider: NSObject, ObservableObject {
         stopScanning()
         selectedDevice = device
         heartRatePeripheral = device.peripheral
+        
+        // Save this device ID for future reconnections
+        UserDefaults.standard.set(device.id.uuidString, forKey: lastConnectedDeviceKey)
         heartRatePeripheral?.delegate = self
         
         connectionState = .connecting
@@ -131,6 +137,37 @@ class BluetoothDeviceProvider: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Auto-reconnection
+
+extension BluetoothDeviceProvider {
+    // Attempt to reconnect to the last connected device
+    private func attemptReconnectToSavedDevice() {
+        guard let deviceIdString = UserDefaults.standard.string(forKey: lastConnectedDeviceKey),
+              UUID(uuidString: deviceIdString) != nil else {
+            return // No previously connected device found or invalid UUID
+        }
+        
+        print("Attempting to reconnect to previously paired device: \(deviceIdString)")
+        
+        // Start scanning to find the device
+        startScanning()
+        
+        // Set a timeout for the auto-reconnection attempt
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self = self, !self.isConnected else { return }
+            
+            // Check if we've discovered the device in our scan
+            if let savedDevice = self.discoveredDevices.first(where: { $0.id.uuidString == deviceIdString }) {
+                print("Found previously connected device, auto-connecting")
+                self.connectToDevice(savedDevice)
+            } else {
+                print("Previously connected device not found nearby")
+                self.stopScanning()
+            }
+        }
+    }
+}
+
 // MARK: - CBCentralManagerDelegate
 
 extension BluetoothDeviceProvider: CBCentralManagerDelegate {
@@ -140,6 +177,10 @@ extension BluetoothDeviceProvider: CBCentralManagerDelegate {
         case .poweredOn:
             // Bluetooth is on and ready
             print("Bluetooth is powered on and ready")
+            // Attempt to reconnect to the last connected device when Bluetooth is ready
+            if !isConnected && !isScanning {
+                attemptReconnectToSavedDevice()
+            }
         case .poweredOff:
             // Bluetooth is off
             print("Bluetooth is powered off")
