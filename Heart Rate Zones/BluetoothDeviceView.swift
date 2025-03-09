@@ -80,6 +80,18 @@ struct BluetoothDeviceView: View {
                 )
             }
         }
+        .alert(isPresented: $showConfirmation) {
+            Alert(
+                title: Text("Connect to Device"),
+                message: Text("Do you want to connect to \(selectedDevice?.name ?? "this device")?\n\nMake sure the device is nearby and ready to pair."),
+                primaryButton: .default(Text("Connect")) {
+                    if let device = selectedDevice {
+                        bluetoothProvider.connectToDevice(device)
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .onChange(of: bluetoothProvider.connectionState) { state in
             if state == .failed {
                 showConnectionError = true
@@ -262,18 +274,7 @@ struct BluetoothDeviceView: View {
                 .listStyle(InsetGroupedListStyle())
             }
         }
-        .alert(isPresented: $showConfirmation) {
-            Alert(
-                title: Text("Connect to Device"),
-                message: Text("Do you want to connect to \(selectedDevice?.name ?? "this device")?\n\nMake sure the device is nearby and ready to pair."),
-                primaryButton: .default(Text("Connect")) {
-                    if let device = selectedDevice {
-                        bluetoothProvider.connectToDevice(device)
-                    }
-                },
-                secondaryButton: .cancel()
-            )
-        }
+        // Alert moved to the main view
     }
 }
 
