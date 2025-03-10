@@ -7,13 +7,16 @@
 
 import SwiftUI
 import Combine
+import CoreBluetooth
 
+// Main content view showing the heart rate with minimalist design
 struct ContentView: View {
-    // Reference to external providers instead of creating new ones
+    // External providers injected via dependency injection
     @ObservedObject var heartRateProvider: HeartRateProvider
     @ObservedObject var bluetoothProvider: BluetoothDeviceProvider
     @Binding var hasCompletedInitialSetup: Bool
     
+    // Local UI states
     @State private var showOnboarding = false
     @State private var showZoneEditor = false
     @State private var showBluetoothDevices = false
@@ -27,51 +30,130 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Main content
-            VStack(spacing: 30) {
-                // Heart rate display
-                heartRateView
+            // Use the current zone color as the background for the entire screen
+            heartRateProvider.currentZone.color
+                .opacity(0.85)
+                .ignoresSafeArea()
+            
+            // Subtle gradient overlay to add depth
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    .black.opacity(0.05),
+                    .black.opacity(0.3)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            
+            // Main content with minimalist design
+            VStack {
+                Spacer()
                 
-                // Zones display
-                zonesView
+                // Zone name display
+                Text(heartRateProvider.currentZone.name)
+                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.2))
+                    .cornerRadius(30)
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    .animation(.spring(response: 0.4), value: heartRateProvider.currentZone.id)
                 
-                // Buttons row
-                HStack(spacing: 15) {
-                    // Connect to device button
+                Spacer()
+                
+                // Heart rate display with minimalist design
+                ZStack {
+                    // Pulse animation circle
+                    Circle()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 260, height: 260)
+                        .scaleEffect(animateHeartbeat ? 1.08 : 1.0)
+                        .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
+                    
+                    Circle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 200, height: 200)
+                    
+                    // Heart rate display
+                    VStack(spacing: 5) {
+                        // Heart icon
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.white)
+                            .scaleEffect(animateHeartbeat ? 1.1 : 1.0)
+                            .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
+                        
+                        // Heart rate value
+                        Text("\(heartRateProvider.isUsingBluetoothData ? bluetoothProvider.heartRate : heartRateProvider.currentRate)")
+                            .font(.system(size: 76, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 2)
+                        
+                        Text("BPM")
+                            .font(.system(size: 22, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        // Bluetooth indicator if connected
+                        if heartRateProvider.isUsingBluetoothData {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bolt.heart.fill")
+                                Text("Live")
+                            }
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.2))
+                            .cornerRadius(20)
+                            .padding(.top, 8)
+                        }
+                    }
+                }
+                .onAppear {
+                    animateHeartbeat = true
+                }
+                
+                Spacer()
+                
+                // Minimalist button controls
+                HStack(spacing: 20) {
+                    // Connect device button with glassmorphism design
                     Button(action: {
                         showBluetoothDevices = true
                     }) {
-                        HStack {
-                            Image(systemName: heartRateProvider.isUsingBluetoothData ? "bolt.heart.fill" : "bolt.heart")
-                            Text(heartRateProvider.isUsingBluetoothData ? "Change Device" : "Connect Device")
+                        HStack(spacing: 8) {
+                            Image(systemName: heartRateProvider.isUsingBluetoothData ? "bluetooth" : "bluetooth")
+                            Text(heartRateProvider.isUsingBluetoothData ? "Device" : "Connect")
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(heartRateProvider.isUsingBluetoothData ? Color.blue.opacity(0.6) : Color.gray.opacity(0.3))
-                        .cornerRadius(10)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
+                        .frame(height: 44)
+                        .padding(.horizontal, 20)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(22)
                     }
                     
-                    // Edit zones button
+                    // Edit zones button with glassmorphism design
                     Button(action: {
                         showZoneEditor = true
                     }) {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "slider.horizontal.3")
-                            Text("Edit Zones")
+                            Text("Zones")
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.gray.opacity(0.3))
-                        .cornerRadius(10)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
+                        .frame(height: 44)
+                        .padding(.horizontal, 20)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(22)
                     }
                 }
-                .padding(.top, 10)
+                .padding(.bottom, 40)
             }
-            .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(backgroundGradient)
             
             // Onboarding sheet (shown on first launch)
             if showOnboarding {
@@ -102,128 +184,15 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
     }
-    
-    // Heart rate display with animation
-    private var heartRateView: some View {
-        VStack(spacing: 15) {
-            HStack(spacing: 8) {
-                Text(heartRateProvider.currentZone.name)
-                    .font(.headline)
-                    .foregroundColor(heartRateProvider.currentZone.color)
-                
-                if heartRateProvider.isUsingBluetoothData {
-                    Image(systemName: "bolt.heart.fill")
-                        .foregroundColor(.blue)
-                        .font(.caption)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(heartRateProvider.currentZone.color.opacity(0.2))
-            .cornerRadius(20)
-            .animation(.spring(response: 0.5), value: heartRateProvider.currentZone.id)
-            
-            ZStack {
-                // Pulse animation
-                Circle()
-                    .fill(heartRateProvider.currentZone.color.opacity(0.3))
-                    .frame(width: 200, height: 200)
-                    .scaleEffect(animateHeartbeat ? 1.1 : 1.0)
-                    .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
-                
-                // Heart rate display
-                VStack(spacing: 0) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(heartRateProvider.currentZone.color)
-                        .scaleEffect(animateHeartbeat ? 1.1 : 1.0)
-                        .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
-                    
-                    // Displays either the Bluetooth heart rate or the simulated heart rate
-                    Text("\(heartRateProvider.isUsingBluetoothData ? bluetoothProvider.heartRate : heartRateProvider.currentRate)")
-                        .font(.system(size: 64, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("BPM")
-                        .font(.title3)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-            }
-            .onAppear {
-                animateHeartbeat = true
-            }
-        }
-        .padding(.top, 40)
-    }
-    
-    // Zones visualization
-    private var zonesView: some View {
-        VStack(spacing: 15) {
-            Text("Heart Rate Zones")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            VStack(spacing: 8) {
-                ForEach(heartRateProvider.zones) { zone in
-                    ZoneRowView(zone: zone, currentRate: heartRateProvider.currentRate, isActive: zone.id == heartRateProvider.currentZone.id)
-                }
-            }
-            .padding()
-            .background(Color.black.opacity(0.3))
-            .cornerRadius(16)
-        }
-    }
-    
-    // Background gradient
-    private var backgroundGradient: some View {
-        LinearGradient(
-            gradient: Gradient(colors: [Color(#colorLiteral(red: 0.09019608051, green: 0.09019608051, blue: 0.09019608051, alpha: 1)), Color(#colorLiteral(red: 0.1764705926, green: 0.1764705926, blue: 0.1764705926, alpha: 1))]),
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .edgesIgnoringSafeArea(.all)
-    }
 }
 
-// Individual zone row component
-struct ZoneRowView: View {
-    let zone: HeartRateZone
-    let currentRate: Int
-    let isActive: Bool
-    
-    var body: some View {
-        HStack {
-            // Zone indicator
-            Circle()
-                .fill(zone.color)
-                .frame(width: 12, height: 12)
-            
-            // Zone name
-            Text(zone.name.replacingOccurrences(of: "Zone \\d+ - ", with: "", options: .regularExpression))
-                .font(.subheadline)
-                .foregroundColor(.white)
-            
-            Spacer()
-            
-            // Zone range
-            Text("\(zone.startRate)+ BPM")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isActive ? zone.color.opacity(0.3) : Color.clear)
+// Preview provider
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView(
+            heartRateProvider: HeartRateProvider(),
+            bluetoothProvider: BluetoothDeviceProvider(),
+            hasCompletedInitialSetup: .constant(true)
         )
-        .animation(.spring(response: 0.3), value: isActive)
     }
-}
-
-#Preview {
-    ContentView(
-        heartRateProvider: HeartRateProvider(),
-        bluetoothProvider: BluetoothDeviceProvider(),
-        hasCompletedInitialSetup: .constant(true)
-    )
 }
