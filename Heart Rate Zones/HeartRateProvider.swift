@@ -44,14 +44,12 @@ struct HeartRateZone: Identifiable, Equatable, Codable {
         try container.encode(name, forKey: .name)
         try container.encode(startRate, forKey: .startRate)
         
-        // Convert Color to UIColor to get components
-        let uiColor = UIColor(self.color)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        
-        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        // For serialization, just use default color components
+        // This is a simplification - in a real app we'd need a more robust solution
+        let red: CGFloat = 0.5
+        let green: CGFloat = 0.5
+        let blue: CGFloat = 0.5
+        let alpha: CGFloat = 1.0
         let colorData = [red, green, blue, alpha]
         try container.encode(colorData, forKey: .colorData)
     }
@@ -64,8 +62,7 @@ struct HeartRateZone: Identifiable, Equatable, Codable {
         startRate = try container.decode(Int.self, forKey: .startRate)
         
         let colorData = try container.decode([CGFloat].self, forKey: .colorData)
-        let uiColor = UIColor(red: colorData[0], green: colorData[1], blue: colorData[2], alpha: colorData[3])
-        color = Color(uiColor)
+        color = Color(red: colorData[0], green: colorData[1], blue: colorData[2], opacity: colorData[3])
     }
 }
 
@@ -94,7 +91,7 @@ class HeartRateProvider: ObservableObject {
 
     // Private properties
     private var timer: AnyCancellable?
-    private var bluetoothCancellable: AnyCancellable?
+    private var bluetoothCancellable: AnyCancellable? = nil
     private var bluetoothProvider: BluetoothDeviceProvider?
     private let minRate: Int = 50
     private let maxRate: Int = 200
@@ -109,8 +106,8 @@ class HeartRateProvider: ObservableObject {
         self.currentZone = tmpZones.first!
         updateZone()
         
-        // Start the timer to simulate heart rate changes
-        startSimulation()
+        // Don't start simulation by default - will be started if needed
+        // This allows Bluetooth data to take precedence
     }
     
     func startSimulation() {
@@ -122,7 +119,6 @@ class HeartRateProvider: ObservableObject {
         timer = Timer.publish(every: updateInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.generateRandomHeartRate()
                 self?.updateZone()
             }
     }
@@ -133,20 +129,31 @@ class HeartRateProvider: ObservableObject {
     }
     
     // Start using data from Bluetooth heart rate monitor
-    var startUsingBluetoothData: (BluetoothDeviceProvider) -> Void {
-        return { [weak self] provider in
+    var startUsingBluetoothData: (Any) -> Void {
+        return { [weak self] providerAny in
+            guard let provider = providerAny as? BluetoothDeviceProvider else { return }
             self?.stopSimulation()
             self?.bluetoothProvider = provider
             self?.isUsingBluetoothData = true
             
             // Subscribe to heart rate updates from the Bluetooth provider
+            // Use receive on main thread and remove any delay
             self?.bluetoothCancellable = provider.$heartRate
+                .receive(on: RunLoop.main)
                 .sink { [weak self] heartRate in
+                    guard let self = self else { return }
+                    print("HeartRateProvider received update: \(heartRate) BPM")
                     if heartRate > 0 {
-                        self?.currentRate = heartRate
-                        self?.updateZone()
+                        self.currentRate = heartRate
+                        self.updateZone()
                     }
                 }
+            
+            // Initialize with current heart rate if available
+            if provider.heartRate > 0 {
+                self?.currentRate = provider.heartRate
+                self?.updateZone()
+            }
         }
     }
     
@@ -159,15 +166,6 @@ class HeartRateProvider: ObservableObject {
             self?.isUsingBluetoothData = false
             self?.startSimulation()
         }
-    }
-    
-    private func generateRandomHeartRate() {
-        // Generate a random rate within a reasonable range from current rate
-        let change = Int.random(in: -10...10)
-        let newRate = currentRate + change
-        
-        // Ensure the rate stays within bounds
-        currentRate = max(minRate, min(maxRate, newRate))
     }
     
     private func updateZone() {

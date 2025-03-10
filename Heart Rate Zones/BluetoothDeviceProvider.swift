@@ -312,8 +312,18 @@ extension BluetoothDeviceProvider: CBPeripheralDelegate {
         if characteristic.uuid == heartRateMeasurementCharacteristicUUID, let data = characteristic.value {
             // Parse and update the heart rate value
             let heartRateValue = parseHeartRate(from: data)
+            
+            // Log and immediately update the heart rate on the main thread
+            print("Received heart rate: \(heartRateValue) BPM")
+            
+            // Using DispatchQueue.main.async to update UI properties
             DispatchQueue.main.async { [weak self] in
-                self?.heartRate = heartRateValue
+                guard let self = self else { return }
+                // Set the heartRate property which will trigger the publisher
+                // that HeartRateProvider is observing
+                if self.heartRate != heartRateValue {
+                    self.heartRate = heartRateValue
+                }
             }
         }
     }
