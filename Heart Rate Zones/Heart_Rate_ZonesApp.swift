@@ -29,13 +29,26 @@ struct AppContentCoordinator: View {
     @AppStorage("hasCompletedInitialSetup") private var hasCompletedInitialSetup = false
     
     var body: some View {
-        // Show ContentView when connected and setup is complete, otherwise show BluetoothDeviceView
-        if hasCompletedInitialSetup && bluetoothProvider.isConnected {
+        // Show ContentView when a device is connected or when setup is complete
+        // This skips the BluetoothDeviceView entirely when a device is already connected
+        if bluetoothProvider.isConnected {
             ContentView(
                 heartRateProvider: heartRateProvider,
                 bluetoothProvider: bluetoothProvider,
                 hasCompletedInitialSetup: $hasCompletedInitialSetup
             )
+        } else if !hasCompletedInitialSetup {
+            // Show onboarding if needed
+            // Create a State variable to match OnboardingView's expectation
+            let _ = State(initialValue: true)
+            OnboardingView(
+                showOnboarding: .constant(true),
+                heartRateProvider: heartRateProvider
+            )
+            .onDisappear {
+                // Mark setup as complete when onboarding is finished
+                hasCompletedInitialSetup = true
+            }
         } else {
             BluetoothDeviceView(
                 bluetoothProvider: bluetoothProvider,
