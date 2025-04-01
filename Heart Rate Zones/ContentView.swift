@@ -86,7 +86,7 @@ struct ContentView: View {
                             .animation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateHeartbeat)
                         
                         // Heart rate value
-                        Text("\(heartRateProvider.currentRate)")
+                        Text("\(bluetoothProvider.heartRate)")
                             .font(.system(size: 76, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 2)
